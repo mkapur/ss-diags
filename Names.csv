@@ -1,0 +1,19 @@
+Current names,,New names
+F1_EU_LL,#,Fishery_1
+F2_JPN_LL,#,Fishery_2
+F3_CTP_LL,#,Fishery_3
+F4_USA_LL,#,Fishery_4
+F5_VEN_LL,#,Fishery_5
+F6_CAN_LL,#,Fishery_6
+F7_MOR_LL,#,Fishery_7
+F8_USA_RR,#,Fishery_8
+F9_BEL_LL,#,Fishery_9
+F10_MOR_PS,#,Fishery_10
+F11_CPR_LL,#,Fishery_11
+F12_OTH,#,Fishery_12
+S1_USA_LL_Log,#,CPUE_1
+S2_USA_LL_Obs,#,CPUE_2
+S3_JPN_LL,#,CPUE_3
+S4_EU_POR_LL,#,CPUE_4
+S5_EU_ESP_LL,#,CPUE_5
+S6_CTP_LL,#,CPUE_6
