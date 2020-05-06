@@ -9,7 +9,7 @@ require(reshape2)
 require(tseries)
 cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 # baseDir <- "./Base_Case/"
-baseDir <- "./Max/Reference/"
+baseDir <- "./_mod/atl_tuna_max/New_Ref"
 base_case <- SS_output(baseDir)
 ## first I saved the Names as a csv
 nm <- read.csv("./Names.csv", stringsAsFactors = FALSE)[,c(1,3)]
@@ -17,7 +17,7 @@ nm <- read.csv("./Names.csv", stringsAsFactors = FALSE)[,c(1,3)]
 
 ## for use with MAX
 nm <- data.frame("Current.names" = base_case$FleetNames[1:4], 
-                 New.Names = c(paste0("Fishery",1:3),"Survey_1"))
+                 New.names = c(paste0("Fishery",1:3),"Survey_1"))
 ## functions needed ----
 
 runs.sig3 <- function(x,type="resid") {
@@ -495,7 +495,42 @@ p1 <- ggplot(CPUE_ResidRaw, aes(x = Yr, y = logResidual)) +
 ggsave(p1, file = "./Fig6_JABBAResid_CPUE.png",
        width = 10, height = 8, dpi = 720, unit = 'in')
 
+## Fig 6B JABBARESID max ----
+CPUE_ResidRaw <- base_case$cpue %>%
+  select(-Fleet) %>%
+  merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
+  mutate(Fleet =  New.names) %>%
+  select(-Fleet_name, -New.names) %>%
+  mutate(logResidual = log(Obs) - log(Exp)) %>%
+  filter(abs(logResidual) < 3) %>%
+  select(Yr, Fleet, logResidual)
 
+smooth.res <- CPUE_ResidRaw %>%
+  mutate(smooth.res.all = predict(loess(logResidual~Yr))) %>%
+  group_by(Yr) %>%
+  dplyr::summarise(smoother = mean(smooth.res.all))
+
+
+
+p1 <- ggplot(CPUE_ResidRaw, aes(x = Yr, y = logResidual)) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), 
+        legend.text = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        axis.title =  element_text(size = 12)) +
+  geom_boxplot(aes(group = Yr)) +
+  geom_point(aes(colour = Fleet), size = 2, shape = 19) +
+  geom_hline(yintercept = 0, linetype = 'dashed') +
+  geom_line(data = smooth.res, aes(x = Yr, y = smoother, color = 'loess'),
+            lwd = 0.8) +
+  scale_color_manual(values = cbbPalette[c(1,2)])+
+  geom_text(check_overlap = TRUE,aes(x = 2013, y = 0.75,
+                label = paste0('RMSE = ',with(CPUE_ResidRaw,
+                                                                  round(100*sqrt(sum(logResidual^2,na.rm =TRUE)/nrow(CPUE_ResidRaw)),1)),"%")), size = 5) +
+  labs(x = 'Year', y = 'log residual', col = "")
+
+ggsave(p1, file = "./Fig6_JABBAResid_CPUE_Max.png",
+       width = 10, height = 8, dpi = 720, unit = 'in')
 
 ## use mlRes made for runs test plot
 smooth.res <- mlRes %>%
@@ -620,7 +655,74 @@ p2 <-  ggplot(meltDat, aes(x = Yr, y = SSB, color = variable)) +
          width = 10, height = 6, dpi = 720, unit = 'in')
   
   
-  ## Fig 10 ASPM panel ----
+  ## Fig 7B side by side jitter ----
+  ## mako and max, just likelihood
+## MAX JITTER
+  maxDir <- "./_mod/atl_tuna_max/Reference/"
+  max_base <- SS_output(maxDir)
+    
+  # jit <- read.csv("./_mod/atl_tuna_max/jit_like_Max.csv")
+  # names(jit) <- c("idx", "value")
+  #   
+    ## METHOD for what is in plots/likelihoods
+    jit <- read.csv("./_mod/atl_tuna_max/plots/Likelihoods.csv", sep = " ") %>%
+    filter(Label == "TOTAL") %>%
+    reshape2::melt() %>%
+    filter(!is.na(value)) %>%
+    dplyr::mutate(idx0 = as.numeric(as.character(sub('replist',"",variable))))
+
+  p1 <-  
+    jit %>%
+    mutate(idx = 1:nrow(.)) %>%
+    ggplot(., aes(x = idx, y = value)) +
+    theme_bw() + 
+    theme( panel.grid = element_blank(),
+           strip.text = element_text(size = 16),
+           axis.text = element_text(size = 10),
+           axis.title =  element_text(size = 12),
+           legend.position = 'none') +
+    geom_hline(yintercept = max_base$likelihoods_used[[1]][1], 
+               col = 'red', linetype = 'dashed') +
+    geom_point() +
+    scale_y_continuous(limits = c(0,3000)) +
+    labs(x = "Jitter runs at a converged solution",
+         y = "Total Likelihood")
+
+  
+  ## MAKO jitter
+  
+  makoDir <- "./_mod/Jitter_Mako/02_SS_NEW_run"
+  mako_base <- SS_output(makoDir)
+
+  jit <- read.csv("./_mod/Jitter_Mako/plots/Likelihoods.csv", sep = " ") %>% 
+    filter(Label == "TOTAL") %>%
+    reshape2::melt() %>%
+    filter(!is.na(value)) %>%
+    dplyr::mutate(idx0 = as.numeric(as.character(sub('replist',"",variable))))
+
+  p2 <-  jit %>%
+    mutate(idx = 1:nrow(.)) %>%
+    ggplot(., aes(x = idx, y = value)) +
+    theme_bw() + 
+    theme( panel.grid = element_blank(),
+           strip.text = element_text(size = 16),
+           axis.text = element_text(size = 10),
+           axis.title =  element_text(size = 12),
+           legend.position = 'none') +
+    geom_hline(yintercept = mako_base$likelihoods_used[[1]][1], 
+               col = 'red', linetype = 'dashed') +
+    geom_point() +
+    scale_y_continuous(limits = c(0,155)) +
+    labs(x = "Jitter runs at a converged solution",
+         y = "Total Likelihood")
+require(patchwork)
+ggsave(p2 | p1,
+       file = "./Fig7B_jitter_max_mako.png",
+       width = 12, height = 10, dpi = 500, unit = 'in')
+
+
+
+## Fig 10 ASPM panel ----
   # aspm <- SS_output("./ASPMII/")
   aspm <- SS_output("./MAX/ASPM_RUN/")
   stdtable <- aspm$derived_quants[substring(aspm$derived_quants$Label,1,5)=="Recr_",]  %>%
@@ -763,4 +865,7 @@ p2 <-  ggplot(meltDat, aes(x = Yr, y = SSB, color = variable)) +
   ggsave(((p1 |p2)/p3),
          file = "./Fig10_ASPMPanel_Max.png",
          width = 12, height = 12, dpi = 500, unit = 'in')
+  
+  
+  
   
