@@ -407,7 +407,7 @@ p3 <- idxProf %>%
   labs(x =expression("ln(R"[0]*")"), y = "Change in Log-Likelihood", col = "")
 
 ggsave((p1 | p2  |p3), 
-       file = "./Fig3_LikelihoodPanel)Max.png",
+       file = "./Fig3_LikelihoodPanel_Max.png",
        width = 10, height = 8, dpi = 720, unit = 'in')
 
 ## run code to generate objects
@@ -767,7 +767,7 @@ p2 <-  ggplot(meltDat, aes(x = Yr, y = SSB, color = variable)) +
            strip.text = element_text(size = 16),
            axis.text = element_text(size = 10),
            axis.title =  element_text(size = 12),
-           legend.position = 'none') +
+           legend.position = '') +
     geom_hline(yintercept = mako_base$likelihoods_used[[1]][1], 
                col = 'red', linetype = 'dashed') +
     geom_point() +
@@ -782,8 +782,137 @@ ggsave(p2 | p1,
 
 
 ## Fig 10 ASPM panel ----
-  # aspm <- SS_output("./ASPMII/")
-  aspm <- SS_output("./MAX/ASPM_RUN/")
+## load & fill plot list in a loop, first mako then max
+plist = list(); idx = 1
+for(i in c(1:2)){
+  baseDir <- c("./_mod/Jitter_Mako/02_SS_NEW_run","./_mod/atl_tuna_max/ASPM")[i]
+  aspmDir <- c("./_mod/ASPMII","./_mod/atl_tuna_max/New_Ref")[i] ## mako, max
+  aspm <- SS_output(aspmDir, covar = FALSE)
+  base_case <- SS_output(baseDir)
+  
+  if(i == 1){
+    nm <- read.csv("./Names.csv", stringsAsFactors = FALSE)[,c(1,3)]
+  } else{
+    ## for use with MAX
+    nm <- data.frame("Current.names" = base_case$FleetNames[1:4], 
+                     New.names = c(paste0("Fishery",1:3),"Survey_1"))
+  }
+  
+
+
+
+ 
+  
+
+  ## CPUE 5 fits on single plot
+  cp0 <- bind_rows(aspm$cpue %>% 
+                     merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
+                     filter(Fleet_name == ifelse(i == 2, "Medits15_16", 'S5_EU_ESP_LL')) %>% ## S5 FOR PREVIOUS
+                     mutate(model = 'ASPM'),
+                   base_case$cpue %>% 
+                     merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
+                     filter(Fleet_name == ifelse(i == 2, "Medits15_16", 'S5_EU_ESP_LL')) %>% ## S5 FOR PREVIOUS
+                     mutate(model = 'Base Case')) %>%
+    mutate(     lower_total = NA, #qnorm(.025, mean = Exp, sd = SE),
+                upper_total = NA) %>%  #qnorm(.975, mean = Exp, sd = SE)) %>%
+    select(Yr, Obs, Exp, SE, lower_total, upper_total, model)
+  
+  cp <- rbind(cp0,
+              cp0 %>% filter(model == 'ASPM') %>% 
+                mutate(model = 'Observed', 
+                       lower_total = exp(log(Obs) + qt(0.025, df = 30) * 
+                                           SE),
+                       upper_total = exp(log(Obs) + qt(0.975, df = 30) * 
+                                           SE)))
+  
+  
+  plist[[idx]] <- ggplot(cp, aes(x = Yr, y = Exp, color = model)) +
+    theme_bw() + 
+    theme( panel.grid = element_blank(),
+           strip.text = element_text(size = 16),
+           axis.text = element_text(size = 10),
+           axis.text.y = element_blank(),
+           axis.title =  element_text(size = 12),
+           legend.position = c('none')) +  
+    scale_color_manual(values = c('dodgerblue2','seagreen4', 'black')) +
+    guides(shape = FALSE, linetype = FALSE,
+           colour = guide_legend(override.aes =  list(shape = c(NA,NA,1),
+                                                      linetype = c("solid","solid","blank")))) +  
+    geom_errorbar(data = subset(cp, model == 'Observed'),
+                  aes(x = Yr, ymin = lower_total, 
+                      ymax = upper_total,
+                      group = model, color = model)) +
+    geom_point(data = subset(cp, model == 'Observed'), shape = 1,
+               aes(x = Yr, y = Obs, color = model)) +
+    
+    geom_line(data = subset(cp, model != 'Observed'),
+              aes(x = Yr, y = Exp, color = model), lwd =1.1) +
+    
+    # scale_y_continuous(limits = c(0,80)) +
+    scale_x_continuous(limits = c(1989,2018), 
+                       breaks = seq(1990,2018,10)) +
+    labs(x = 'Year', 
+         y = paste0('Index ',
+                    ifelse(i == 2, "Survey_1",  'CPUE_5')),  
+         color = "")
+  idx <- idx + 1
+  
+  ## Derived RelSSB with error and refpt line
+  stdtable <- aspm$derived_quants[substring(aspm$derived_quants$Label,1,4)=="SSB_",]  %>%
+    mutate(model = 'ASPM', SSBMSY =  aspm$derived_quants$Value[substring(aspm$derived_quants$Label,1,7)
+                                                                    =="SSB_MSY"]) %>%
+    bind_rows(.,
+              base_case$derived_quants[substring(base_case$derived_quants$Label,1,4)=="SSB_",]  %>%
+                mutate(model = 'Base Case', SSBMSY =  base_case$derived_quants$Value[substring(base_case$derived_quants$Label,1,7)
+                                                                                     =="SSB_MSY"]))
+  # stdtable <- stdtable[tolower(stdtable$Label)!="SSB_unfished",]
+  # year as the part of the Label string starting with 6th character
+  stdtable$Yr <- substring(stdtable$Label,5)
+  # filling in Virgin and Initial years as 2 and 1 years prior to following years
+  # stdtable$Yr[c(1,2,73,74)] <- as.numeric(stdtable$Yr[3])-(2:1) ## original
+  
+  stdtable$Yr <- as.numeric(stdtable$Yr)
+  stdtable$val <- stdtable$Value
+  # assume SSB have normal distribution
+  plist[[idx]] <- 
+    stdtable %>% 
+    filter(!is.na(Yr) ) %>%
+    group_by(Yr, model) %>%
+    dplyr::summarise(Value = val, 
+              SSBMSY = SSBMSY,
+              lower = Value - 1.96*StdDev,
+              upper = Value + 1.96*StdDev ) %>%
+    ggplot(., aes(x = Yr, y = Value, fill = model, color = model)) +
+    theme_bw() + 
+    theme( panel.grid = element_blank(),
+           strip.text = element_text(size = 16),
+           axis.text = element_text(size = 10),
+           axis.text.y = element_blank(),
+           
+           axis.title =  element_text(size = 12),
+           legend.position = c('none')) +  
+    scale_x_continuous(limits = c(1948,2016), breaks = seq(1950,2016,10)) +
+    # scale_y_continuous(limits = c(0,2700)) +
+    
+    scale_color_manual(values = c('dodgerblue2','seagreen4')) +
+    scale_fill_manual(values = c('dodgerblue2','seagreen4')) +
+    geom_ribbon(aes(x = Yr, ymin = lower, ymax = upper, group = model, fill = model),
+                alpha = 0.2 , color = NA) +
+    geom_point() +
+    
+    geom_hline(aes(yintercept = SSBMSY, colour = model ), 
+               linetype = 'dashed', lwd = 1.1, alpha = 0.2) +
+    geom_text(aes(x = 1960, y = SSBMSY*1.1, label = 'SSB_MSY',color = model), 
+              check_overlap = TRUE,
+              alpha = 0.5) +
+    guides( color = FALSE,
+            fill = guide_legend(override.aes =  list(shape = c(19,19),
+                                                     color = c('dodgerblue2','seagreen4')))) +
+    labs(x = 'Year', y = 'Spawning Biomass (1000 mt)', fill = "")
+  idx <- idx + 1
+  
+  
+  ## Recruit TS on single plot
   stdtable <- aspm$derived_quants[substring(aspm$derived_quants$Label,1,5)=="Recr_",]  %>%
     mutate(model = 'ASPM') %>%
     bind_rows(.,
@@ -807,15 +936,17 @@ ggsave(p2 | p1,
   stdtable$lower <- exp(log(v) - 1.96*stdtable$logint)
   stdtable$upper <- exp(log(v) + 1.96*stdtable$logint)
   
-  ## Recruit TS on single plot
-  p1 <-  ggplot(stdtable, aes(x = Yr, y = Value, color = model)) +
+  plist[[idx]] <-  ggplot(stdtable, aes(x = Yr, y = Value, color = model)) +
     theme_bw() + 
     theme( panel.grid = element_blank(),
            strip.text = element_text(size = 16),
            axis.text = element_text(size = 10),
+           axis.text.y = element_blank(),
+           
            axis.title =  element_text(size = 12),
-           legend.position = 'none') +  
-    scale_x_continuous(limits = c(1947,2017), breaks = seq(1950,2015,10)) +
+           legend.position = 'bottom') +  
+    scale_x_continuous(limits = c(base_case$startyr,2020),
+                       breaks = seq(1950,2020,10)) +
     # scale_y_continuous(limits = c(0,600)) +
     scale_color_manual(values = c('dodgerblue2','seagreen4')) +
     # geom_ribbon(aes(x = Yr, ymin = lower, ymax = upper, group = model, fill = model),
@@ -824,105 +955,14 @@ ggsave(p2 | p1,
     geom_point() +
     labs(x = 'Year', y = 'Age-0 Recruits (1000s)', color = "")
   
-  ## CPUE 5 fits on single plot
-  cp0 <- bind_rows(aspm$cpue %>% 
-                     merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
-                     filter(Fleet_name == "Medits15_16") %>% ## S5 FOR PREVIOUS
-                     mutate(model = 'ASPM'),
-                   base_case$cpue %>% 
-                     merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
-                     filter(Fleet_name == "Medits15_16") %>%
-                     mutate(model = 'Base Case')) %>%
-    mutate(     lower_total = NA, #qnorm(.025, mean = Exp, sd = SE),
-                upper_total = NA) %>%  #qnorm(.975, mean = Exp, sd = SE)) %>%
-    select(Yr, Obs, Exp, SE, lower_total, upper_total, model)
+  idx <- idx + 1
   
-  cp <- rbind(cp0,
-              cp0 %>% filter(model == 'ASPM') %>% 
-                mutate(model = 'Observed', 
-                       lower_total = exp(log(Obs) + qt(0.025, df = 30) * 
-                                           SE),
-                       upper_total = exp(log(Obs) + qt(0.975, df = 30) * 
-                                           SE)))
+}
+
   
-  
-  p2 <- ggplot(cp, aes(x = Yr, y = Exp, color = model)) +
-    theme_bw() + 
-    theme( panel.grid = element_blank(),
-           strip.text = element_text(size = 16),
-           axis.text = element_text(size = 10),
-           axis.title =  element_text(size = 12),
-           legend.position = c(0.85,0.15)) +  
-    scale_color_manual(values = c('dodgerblue2','seagreen4', 'black')) +
-    guides(shape = FALSE, linetype = FALSE,
-           colour = guide_legend(override.aes =  list(shape = c(NA,NA,1),
-                                                      linetype = c("solid","solid","blank")))) +  
-    geom_errorbar(data = subset(cp, model == 'Observed'),
-                  aes(x = Yr, ymin = lower_total, 
-                      ymax = upper_total,
-                      group = model, color = model)) +
-    geom_point(data = subset(cp, model == 'Observed'), shape = 1,
-               aes(x = Yr, y = Obs, color = model)) +
-    
-    geom_line(data = subset(cp, model != 'Observed'),
-              aes(x = Yr, y = Exp, color = model), lwd =1.1) +
-    
-    # scale_y_continuous(limits = c(0,80)) +
-    scale_x_continuous(limits = c(1989,2016), breaks = seq(1990,2018,10)) +
-    labs(x = 'Year', y = 'Index Survey_1', color = "")
-  
-  ## Derived RelSSB with error and refpt line
-  stdtable <- aspm$derived_quants[substring(aspm$derived_quants$Label,1,4)=="SSB_",]  %>%
-    mutate(model = 'ASPM', SSBMSY =  aspm$derived_quants$Value[substring(aspm$derived_quants$Label,1,7)
-                                                                    =="SSB_MSY"]) %>%
-    bind_rows(.,
-              base_case$derived_quants[substring(base_case$derived_quants$Label,1,4)=="SSB_",]  %>%
-                mutate(model = 'Base Case', SSBMSY =  base_case$derived_quants$Value[substring(base_case$derived_quants$Label,1,7)
-                                                                                     =="SSB_MSY"]))
-  # stdtable <- stdtable[tolower(stdtable$Label)!="SSB_unfished",]
-  # year as the part of the Label string starting with 6th character
-  stdtable$Yr <- substring(stdtable$Label,5)
-  # filling in Virgin and Initial years as 2 and 1 years prior to following years
-  # stdtable$Yr[c(1,2,73,74)] <- as.numeric(stdtable$Yr[3])-(2:1) ## original
-  
-  stdtable$Yr <- as.numeric(stdtable$Yr)
-  stdtable$val <- stdtable$Value
-  # assume SSB have normal distribution
-  p3 <- 
-    stdtable %>% 
-    filter(!is.na(Yr) ) %>%
-    group_by(Yr, model) %>%
-    dplyr::summarise(Value = val, 
-              SSBMSY = SSBMSY,
-              lower = Value - 1.96*StdDev,
-              upper = Value + 1.96*StdDev ) %>%
-    ggplot(., aes(x = Yr, y = Value, fill = model, color = model)) +
-    theme_bw() + 
-    theme( panel.grid = element_blank(),
-           strip.text = element_text(size = 16),
-           axis.text = element_text(size = 10),
-           axis.title =  element_text(size = 12),
-           legend.position = c(0.9,0.75)) +  
-    scale_x_continuous(limits = c(1948,2016), breaks = seq(1950,2016,10)) +
-    # scale_y_continuous(limits = c(0,2700)) +
-    
-    scale_color_manual(values = c('dodgerblue2','seagreen4')) +
-    scale_fill_manual(values = c('dodgerblue2','seagreen4')) +
-    geom_ribbon(aes(x = Yr, ymin = lower, ymax = upper, group = model, fill = model),
-                alpha = 0.2 , color = NA) +
-    geom_point() +
-    
-    geom_hline(aes(yintercept = SSBMSY, colour = model ), 
-               linetype = 'dashed', lwd = 1.1, alpha = 0.2) +
-    geom_text(aes(x = 1960, y = SSBMSY+50, label = 'SSB_MSY',color = model), alpha = 0.5) +
-    guides( color = FALSE,
-            fill = guide_legend(override.aes =  list(shape = c(19,19),
-                                                     color = c('dodgerblue2','seagreen4')))) +
-    labs(x = 'Year', y = 'Spawning Biomass (1000 mt)', fill = "")
-  
-  
-  ggsave(((p1 |p2)/p3),
-         file = "./Fig10_ASPMPanel_Max.png",
+  ggsave( (plist[[1]]/plist[[2]]/plist[[3]]) | 
+            (plist[[4]]/plist[[5]]/plist[[6]]),
+         file = "./Fig10_ASPMPanel_mako_Max.png",
          width = 12, height = 12, dpi = 500, unit = 'in')
   
   
