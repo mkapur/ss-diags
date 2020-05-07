@@ -234,52 +234,63 @@ dev.off()
 ## correct names and prettier than r4ss 
 
 ## make summary of retrospectives, package-free
-retroSummary <- list.dirs("./Retrospective/", recursive = FALSE, full.names = TRUE)[grepl("retro*",list.dirs("./Retrospective/", recursive = FALSE, full.names = TRUE))] %>%
-  lapply(.,SS_output) %>%
-  SSsummarize() 
+ meltDats <- list()
+for(k in 1:2){
+  retroFolder <-  c("./_mod/Retrospective","./_mod/atl_tuna_max/retrospectives/")[k]
+  baseDir <- c("./_mod/Jitter_Mako/02_SS_NEW_run","./_mod/atl_tuna_max/New_Ref")[k]
+  base_case <- SS_output(baseDir)
+  
+  retroSummary <- list.dirs(retroFolder, 
+                            recursive = FALSE, full.names = TRUE)[grepl("retro*",list.dirs(retroFolder, recursive = FALSE, full.names = TRUE))] %>%
+    lapply(.,SS_output) %>%
+    SSsummarize() 
+  
+  ssbvals       <- retroSummary$SpawnBio 
+  ssbvalsLower  <- retroSummary$SpawnBioLower
+  ssbvalsUpper  <- retroSummary$SpawnBioUpper
 
-ssbvals       <- retroSummary$SpawnBio 
-ssbvalsLower  <- retroSummary$SpawnBioLower
-ssbvalsUpper  <- retroSummary$SpawnBioUpper
-
-
-## manually remove the vals based on the retro year
-for(i in 1:5){
-  ssbvals[,paste0('model',i)][ssbvals$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
-  ssbvalsLower[,paste0('model',i)][ssbvalsLower$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
-  ssbvalsUpper[,paste0('model',i)][ssbvalsUpper$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
+  ## manually remove the vals based on the retro year
+  for(i in 1:5){
+    ssbvals[,paste0('model',i)][ssbvals$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
+    ssbvalsLower[,paste0('model',i)][ssbvalsLower$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
+    ssbvalsUpper[,paste0('model',i)][ssbvalsUpper$Label >= paste0("SSB_", base_case$endyr-i)] <- NA
+  }
+  rm(base_case)
+  ## melt and bind
+  meltDat <- ssbvals %>% select(-Label) %>% melt(id = 'Yr') %>% 
+    merge(.,  ssbvalsLower %>% select(-Label) %>% melt(id = 'Yr'), 
+          by = c('Yr','variable')) %>%
+    merge(., ssbvalsUpper %>% select(-Label) %>% melt(id = 'Yr'), 
+          by = c('Yr','variable'))
+  
+  ## rename the models
+  levels(meltDat$variable) <-  unlist(lapply(list.dirs(retroFolder, recursive = FALSE, full.names = TRUE)[grepl("retro*",list.dirs(retroFolder, recursive = FALSE, full.names = TRUE))], basename))
+  levels(meltDat$variable)[6] <- 'Base Case'
+  ## custom order factor levels
+  meltDat$variable <- factor(meltDat$variable, levels(meltDat$variable)[c(6,1:5)])
+  ## rename columns
+  names(meltDat)[3:5] <- c('SSB','LWR','UPR')
+  meltDats[[k]] <- meltDat
 }
 
-## melt and bind
-meltDat<- ssbvals %>% select(-Label) %>% melt(id = 'Yr') %>% 
-  merge(.,  ssbvalsLower %>% select(-Label) %>% melt(id = 'Yr'), 
-                                                         by = c('Yr','variable')) %>%
-  merge(., ssbvalsUpper %>% select(-Label) %>% melt(id = 'Yr'), 
-        by = c('Yr','variable'))
-
-## rename the models
-levels(meltDat$variable) <-  unlist(lapply(list.dirs("./Retrospective/", recursive = FALSE, full.names = TRUE)[grepl("retro*",list.dirs("./Retrospective/", recursive = FALSE, full.names = TRUE))], basename))
-levels(meltDat$variable)[6] <- 'Base Case'
-## custom order factor levels
-meltDat$variable <- factor(meltDat$variable, levels(meltDat$variable)[c(6,1:5)])
-## rename columns
-names(meltDat)[3:5] <- c('SSB','LWR','UPR')
-
-
-## raw recruits
-ggplot(meltDat, aes(x = Yr, y = SSB, color = variable)) +
-  theme_bw() + 
-  theme(panel.grid = element_blank()) +
-  geom_line(lwd = 1.1) +
-  geom_ribbon(aes(ymin = LWR, ymax = UPR, fill = variable), color = NA,  alpha = 0.15) +
-  # scale_color_brewer(palette  = 'virid') +
-  scale_color_viridis_d() +
-  scale_fill_viridis_d() +
-  scale_x_continuous(limits = c(1985,2015), expand = c(0,0)) +
-  # scale_y_continuous( limits = c(0,500), expand = c(0,0)) +
-  labs(x = 'Year', y = 'SSB (mt)', fill = "", color = "")
-
-ggsave(last_plot(), file = "./Fig2_RetroSSB_clean.png",
+plist <- list()
+for(i in 1:2){
+  dat <- meltDats[[i]]
+  ## raw recruits
+  plist[[i]] <- ggplot(dat, aes(x = Yr, y = SSB, 
+                                    color = variable)) +
+    theme_bw() + 
+    theme(panel.grid = element_blank()) +
+    geom_line(lwd = 1.1) +
+    # geom_ribbon(aes(ymin = LWR, ymax = UPR, fill = variable), color = NA,  alpha = 0.15) +
+    # scale_color_brewer(palette  = 'virid') +
+    scale_color_viridis_d() +
+    scale_fill_viridis_d() +
+    # scale_x_continuous(limits = c(1985,2015), expand = c(0,0)) +
+    # scale_y_continuous( limits = c(0,500), expand = c(0,0)) +
+    labs(x = 'Year', y = 'SSB (mt)', fill = "", color = "")
+}
+ggsave(plist[[1]] |plist[[2]], file = "./Retro_Panel.png",
        dpi = 720, width = 8, height = 6, units = 'in'
        )
 
@@ -785,8 +796,8 @@ ggsave(p2 | p1,
 ## load & fill plot list in a loop, first mako then max
 plist = list(); idx = 1
 for(i in c(1:2)){
-  baseDir <- c("./_mod/Jitter_Mako/02_SS_NEW_run","./_mod/atl_tuna_max/ASPM")[i]
-  aspmDir <- c("./_mod/ASPMII","./_mod/atl_tuna_max/New_Ref")[i] ## mako, max
+  baseDir <- c("./_mod/Jitter_Mako/02_SS_NEW_run","./_mod/atl_tuna_max/New_Ref")[i]
+  aspmDir <- c("./_mod/ASPMII","./_mod/atl_tuna_max/ASPM")[i] ## mako, max
   aspm <- SS_output(aspmDir, covar = FALSE)
   base_case <- SS_output(baseDir)
   
