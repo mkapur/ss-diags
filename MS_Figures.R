@@ -285,12 +285,13 @@ ggsave(last_plot(), file = "./Fig2_RetroSSB_clean.png",
 
 
 
-## Fig 3 Panel of likelihood profies ----
+## Fig 3 Profile Panel ----
+
 # for r0, comps and indices, with correct fishery names
 ## also had to save as CSV
 r0vec <- seq(4.8,6.8,0.1) ## x axis
 
-recProf <- read.table("./Profile/Profile.csv", skip = 1, sep = ",", header =TRUE)[,1:5]
+recProf <- read.table("./_/Profile.csv", skip = 1, sep = ",", header =TRUE)[,1:5]
 
 compProf <- read.table("./Profile/Profile.csv", skip = 1, sep = ",", header =TRUE)[,7:11] %>% mutate(r0vec)
 names(compProf) <- c(nm$New.names[nm$Current.names %in% names(compProf)], 'LNR0') ## swap names
@@ -343,13 +344,71 @@ p3 <- idxProf %>%
 ggsave((p1 | p2  |p3), file = "./Fig3_LikelihoodPanel.png",
        width = 10, height = 8, dpi = 720, unit = 'in')
 
+## FIG 3B Profile Panel MAX ----
+r0vec <- seq(11.8,13.5,0.1) ## x axis
+
+recProf <- read.table("./_mod/atl_tuna_max/Profile.csv", skip = 1, sep = ",", header =TRUE)[,c(1:3,5,6)]
+
+agecompProf <- data.frame("OTB_ITA" = read.table("./_mod/atl_tuna_max/Profile.csv", skip = 1, sep = ",", header =TRUE)[,8]) %>% mutate(r0vec)
+names(agecompProf) <- c(paste(nm$New.names[nm$Current.names %in% names(agecompProf)]), 'LNR0') ## swap names
+
+lencompProf <-  data.frame(read.table("./_mod/atl_tuna_max/Profile.csv", skip = 1, sep = ",", header =TRUE)[,10:13]) %>% mutate(r0vec)
+names(lencompProf)[4] <- "Medits15_16"
+names(lencompProf) <- c(paste(nm$New.names[nm$Current.names %in% names(lencompProf)]), 'LNR0') ## swap names
+
+idxProf <- data.frame("Medits15_16" = read.table("./_mod/atl_tuna_max/Profile.csv", skip = 1, sep = ",", header =TRUE)[,15])   %>% mutate(r0vec)
+names(idxProf) <- c(paste(nm$New.names[nm$Current.names %in% names(idxProf)]), 'LNR0') # ## swap names
 
 
 ## I updated these so they are in GGPLOT and match the formatting of previous plots
 # 1) In all plots update the name of the CPUE's for "CPUE_1" "CPUE_2" etc
 # 2) On runs test panel add  Yaxis label "Log residuals" and X axis "Year"
 # 3) Increase resolution of all residuals plots if possible.
+p1 <- recProf %>%
+  melt(id = 'SR_LN.R0.' ) %>%
+  ggplot(., aes(x = SR_LN.R0., y = value, col = variable)) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), 
+        legend.position = c(0.25,0.75),
+        legend.text = element_text(size = 14),
+        legend.background = element_blank(),
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 14)) +
+  geom_line(lwd = 1.1) +
+  scale_color_viridis_d() +
+  labs(x =expression("ln(R"[0]*")"), y = "Change in Log-Likelihood", col = "")
 
+p2 <- lencompProf %>%
+  melt(id = 'LNR0' ) %>%
+  ggplot(., aes(x = LNR0, y = value, col = variable)) +
+  theme_bw() + 
+  theme(panel.grid = element_blank(), 
+        legend.position = c(0.25,0.75),
+        legend.text = element_text(size = 14),
+        legend.background = element_blank(),
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 14)) +
+  geom_line(lwd = 1.1) +
+  scale_color_viridis_d() +
+  labs(x =expression("ln(R"[0]*")"), y = "Change in Log-Likelihood", col = "")
+
+p3 <- idxProf %>%
+  melt(id = 'LNR0' ) %>%
+  ggplot(., aes(x = LNR0, y = value, col = variable)) +
+  theme_classic() + 
+  theme(panel.grid = element_blank(), 
+        legend.position = c(0.25,0.75),
+        legend.text = element_text(size = 14),
+        legend.background = element_blank(),
+        axis.text = element_text(size = 14),
+        axis.title = element_text(size = 14)) +
+  geom_line(lwd = 1.1) +
+  scale_color_viridis_d() +
+  labs(x =expression("ln(R"[0]*")"), y = "Change in Log-Likelihood", col = "")
+
+ggsave((p1 | p2  |p3), 
+       file = "./Fig3_LikelihoodPanel)Max.png",
+       width = 10, height = 8, dpi = 720, unit = 'in')
 
 ## run code to generate objects
 # source('./Residuals/ss3residualsdiag.R') ## calls ss3runsFun within it
@@ -495,7 +554,7 @@ p1 <- ggplot(CPUE_ResidRaw, aes(x = Yr, y = logResidual)) +
 ggsave(p1, file = "./Fig6_JABBAResid_CPUE.png",
        width = 10, height = 8, dpi = 720, unit = 'in')
 
-## Fig 6B JABBARESID max ----
+## Fig 6B JABBA RESID max ----
 CPUE_ResidRaw <- base_case$cpue %>%
   select(-Fleet) %>%
   merge(.,nm, by.x = "Fleet_name", by.y = "Current.names") %>%
